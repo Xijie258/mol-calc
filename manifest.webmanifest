@@ -1,0 +1,14 @@
+{
+  "name": "摩尔浓度计算器",
+  "short_name": "摩尔浓度",
+  "description": "配母液 / 稀释 / 单位换算，纯本地计算",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f6f7f9",
+  "theme_color": "#0f766e",
+  "lang": "zh-CN",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

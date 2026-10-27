@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f766e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="摩尔浓度">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon.svg">
+<title>摩尔浓度计算器</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --card:#ffffff; --line:#e3e6ea; --ink:#111827; --muted:#6b7280;
+    --accent:#0f766e; --accent-soft:#e6f4f1; --warn:#b45309; --warn-soft:#fef3e2;
+    --radius:14px;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei","Helvetica Neue",Arial,sans-serif;
+    font-size:16px; line-height:1.5;
+    padding:16px 14px calc(28px + env(safe-area-inset-bottom));
+  }
+  .wrap{max-width:520px;margin:0 auto}
+  h1{font-size:19px;margin:0 0 2px;letter-spacing:.2px}
+  .sub{color:var(--muted);font-size:12.5px;margin-bottom:14px}
+
+  .tabs{display:flex;gap:6px;background:#eceff3;padding:4px;border-radius:12px;margin-bottom:14px}
+  .tabs button{
+    flex:1;border:0;background:transparent;padding:9px 4px;border-radius:9px;
+    font-size:14px;color:#4b5563;font-weight:500;font-family:inherit;
+  }
+  .tabs button.on{background:var(--card);color:var(--accent);font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+
+  .seg{display:flex;gap:6px;background:#eef1f5;padding:3px;border-radius:10px;margin-bottom:12px}
+  .seg button{flex:1;border:0;background:transparent;padding:8px 4px;border-radius:8px;font-size:13.5px;color:#4b5563;font-family:inherit}
+  .seg button.on{background:#fff;color:var(--accent);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.07)}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px;margin-bottom:12px}
+  .row{margin-bottom:12px}
+  .row:last-child{margin-bottom:0}
+  label{display:block;font-size:13px;color:var(--muted);margin-bottom:5px}
+  .field{display:flex;gap:8px}
+  input[type=number],input[type=text],select{
+    flex:1;min-width:0;border:1px solid var(--line);background:#fbfcfd;border-radius:10px;
+    padding:11px 12px;font-size:16px;font-family:inherit;color:var(--ink);
+    -webkit-appearance:none;appearance:none;
+  }
+  input:focus,select:focus{outline:none;border-color:var(--accent);background:#fff}
+  select.sel{flex:0 0 88px;padding-right:6px}
+  .hint{font-size:12px;color:var(--muted);margin-top:5px}
+
+  .out{background:var(--accent-soft);border:1px solid #cfe8e3;border-radius:var(--radius);padding:14px;margin-bottom:12px}
+  .out .big{font-size:28px;font-weight:700;color:var(--accent);letter-spacing:.3px;word-break:break-all}
+  .out .big small{font-size:15px;font-weight:600;margin-left:2px}
+  .out .line{font-size:14px;margin-top:7px;color:#134e4a}
+  .out .line b{font-weight:600}
+  .foot{color:var(--muted);font-size:11.5px;text-align:center;margin-top:18px;line-height:1.7}
+  .btn{border:1px solid var(--line);background:#fff;border-radius:10px;padding:10px 12px;font-size:14px;font-family:inherit;color:#374151}
+  .btn:active{background:#f3f4f6}
+  .hidden{display:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>摩尔浓度计算器</h1>
+  <div class="sub">配母液 / 稀释 / 换算 · 纯本地计算，不上传任何数据</div>
+
+  <div class="tabs" role="tablist">
+    <button id="tab-stock" class="on" onclick="showTab('stock')">配母液</button>
+    <button id="tab-dil" onclick="showTab('dil')">稀释</button>
+    <button id="tab-conv" onclick="showTab('conv')">换算</button>
+  </div>
+
+  <!-- ======== 配母液 ======== -->
+  <section id="p-stock">
+    <div class="seg">
+      <button id="mode-vol" class="on" onclick="setStockMode('vol')">算体积</button>
+      <button id="mode-mass" onclick="setStockMode('mass')">算质量</button>
+      <button id="mode-conc" onclick="setStockMode('conc')">算浓度</button>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <label>化合物分子量 MW（g/mol）</label>
+        <input id="s-mw" type="number" inputmode="decimal" step="any" placeholder="例如 180.16">
+        <div class="field" style="margin-top:8px">
+          <input id="s-name" type="text" placeholder="或输入英文名称，如 glucose">
+          <button class="btn" onclick="lookupMW()">查 MW</button>
+        </div>
+        <div class="hint" id="s-namehint">联网时可从 PubChem 查；中文名不支持</div>
+      </div>
+
+      <!-- 模式A：称药算体积 -->
+      <div id="grp-vol">
+        <div class="row">
+          <label>实际称取质量</label>
+          <div class="field">
+            <input id="s-mass" type="number" inputmode="decimal" step="any" placeholder="例如 10">
+            <select id="s-massu" class="sel">
+              <option value="1e-3" selected>mg</option>
+              <option value="1e-6">μg</option>
+              <option value="1e-9">ng</option>
+              <option value="1e0">g</option>
+            </select>
+          </div>
+        </div>
+        <div class="row">
+          <label>目标浓度</label>
+          <div class="field">
+            <input id="s-conc" type="number" inputmode="decimal" step="any" placeholder="例如 10">
+            <select id="s-concu" class="sel">
+              <option value="1e0">M</option>
+              <option value="1e-3" selected>mM</option>
+              <option value="1e-6">μM</option>
+              <option value="1e-9">nM</option>
+            </select>
+          </div>
+        </div>
+        <div class="row">
+          <label>纯度（%，默认 100）</label>
+          <input id="s-purity" type="number" inputmode="decimal" step="any" placeholder="100">
+        </div>
+      </div>
+
+      <!-- 模式B：定容算质量 -->
+      <div id="grp-mass" class="hidden">
+        <div class="row">
+          <label>目标浓度</label>
+          <div class="field">
+            <input id="s2-conc" type="number" inputmode="decimal" step="any" placeholder="例如 10">
+            <select id="s2-concu" class="sel">
+              <option value="1e0">M</option>
+              <option value="1e-3" selected>mM</option>
+              <option value="1e-6">μM</option>
+              <option value="1e-9">nM</option>
+            </select>
+          </div>
+        </div>
+        <div class="row">
+          <label>定容体积（溶剂加到多少）</label>
+          <div class="field">
+            <input id="s2-vol" type="number" inputmode="decimal" step="any" placeholder="例如 10">
+            <select id="s2-volu" class="sel">
+              <option value="1e0">L</option>
+              <option value="1e-3" selected>mL</option>
+              <option value="1e-6">μL</option>
+              <option value="1e-9">nL</option>
+            </select>
+          </div>
+        </div>
+        <div class="row">
+          <label>纯度（%，默认 100）</label>
+          <input id="s2-purity" type="number" inputmode="decimal" step="any" placeholder="100">
+        </div>
+      </div>
+
+      <!-- 模式C：称药+定容 算浓度 -->
+      <div id="grp-conc" class="hidden">
+        <div class="row">
+          <label>称取质量</label>
+          <div class="field">
+            <input id="s3-mass" type="number" inputmode="decimal" step="any" placeholder="例如 10">
+            <select id="s3-massu" class="sel">
+              <option value="1e-3" selected>mg</option>
+              <option value="1e-6">μg</option>
+              <option value="1e-9">ng</option>
+              <option value="1e0">g</option>
+            </select>
+          </div>
+        </div>
+        <div class="row">
+          <label>定容体积</label>
+          <div class="field">
+            <input id="s3-vol" type="number" inputmode="decimal" step="any" placeholder="例如 10">
+            <select id="s3-volu" class="sel">
+              <option value="1e0">L</option>
+              <option value="1e-3" selected>mL</option>
+              <option value="1e-6">μL</option>
+              <option value="1e-9">nL</option>
+            </select>
+          </div>
+        </div>
+        <div class="row">
+          <label>纯度（%，默认 100）</label>
+          <input id="s3-purity" type="number" inputmode="decimal" step="any" placeholder="100">
+        </div>
+      </div>
+    </div>
+
+    <div class="out" id="s-out" aria-live="polite">
+      <div class="big">—</div>
+      <div class="line">在上面填数字，结果自动出来</div>
+    </div>
+    <div class="hint" style="margin:-6px 2px 12px" id="s-hint">按纯度折算后，定容到这个体积</div>
+  </section>
+
+  <!-- ======== 稀释 ======== -->
+  <section id="p-dil" class="hidden">
+    <div class="card">
+      <div class="row">
+        <label>母液浓度 C1</label>
+        <div class="field">
+          <input id="d-c1" type="number" inputmode="decimal" step="any" placeholder="例如 10">
+          <select id="d-c1u" class="sel">
+            <option value="1e0">M</option>
+            <option value="1e-3" selected>mM</option>
+            <option value="1e-6">μM</option>
+            <option value="1e-9">nM</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <label>目标浓度 C2</label>
+        <div class="field">
+          <input id="d-c2" type="number" inputmode="decimal" step="any" placeholder="例如 100">
+          <select id="d-c2u" class="sel">
+            <option value="1e0">M</option>
+            <option value="1e-3">mM</option>
+            <option value="1e-6" selected>μM</option>
+            <option value="1e-9">nM</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <label>目标终体积 V2</label>
+        <div class="field">
+          <input id="d-v2" type="number" inputmode="decimal" step="any" placeholder="例如 1">
+          <select id="d-v2u" class="sel">
+            <option value="1e0">L</option>
+            <option value="1e-3" selected>mL</option>
+            <option value="1e-6">μL</option>
+            <option value="1e-9">nL</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="out" id="d-out" aria-live="polite">
+      <div class="big">—</div>
+      <div class="line">在上面填数字，结果自动出来</div>
+    </div>
+    <div class="hint" style="margin:-6px 2px 12px">先加部分溶剂，再取母液，最后补到终体积</div>
+  </section>
+
+  <!-- ======== 换算 ======== -->
+  <section id="p-conv" class="hidden">
+    <div class="card">
+      <div class="row">
+        <label>分子量 MW（g/mol）</label>
+        <input id="c-mw" type="number" inputmode="decimal" step="any" placeholder="例如 180.16">
+      </div>
+      <div class="row">
+        <label>质量浓度</label>
+        <div class="field">
+          <input id="c-mass" type="number" inputmode="decimal" step="any" placeholder="例如 5">
+          <select id="c-massu" class="sel" style="flex:0 0 104px">
+            <option value="1e0" selected>g/L</option>
+            <option value="1e0">mg/mL</option>
+            <option value="1e-3">mg/L</option>
+            <option value="1e-3">μg/mL</option>
+            <option value="1e-6">ng/mL</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <label>摩尔浓度</label>
+        <div class="field">
+          <input id="c-mol" type="number" inputmode="decimal" step="any" placeholder="例如 10">
+          <select id="c-molu" class="sel">
+            <option value="1e0">M</option>
+            <option value="1e-3" selected>mM</option>
+            <option value="1e-6">μM</option>
+            <option value="1e-9">nM</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="out" id="c-out" aria-live="polite">
+      <div class="big">—</div>
+      <div class="line">改任意一边，另一边自动跟着变</div>
+    </div>
+  </section>
+
+  <div class="foot">
+    结果仅供参考，正式实验请按化合物性质与实验室 SOP 复核<br>
+    <span id="ver">v1.2</span>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------- 单位表（全部换成基本单位） ----------
+  const CONC = {"1e0":1, "1e-3":1e-3, "1e-6":1e-6, "1e-9":1e-9};    // -> mol/L
+  const VOL  = {"1e0":1, "1e-3":1e-3, "1e-6":1e-6, "1e-9":1e-9};    // -> L
+  const MASS = {"1e0":1, "1e-3":1e-3, "1e-6":1e-6, "1e-9":1e-9};    // -> g
+  const MASSCONC = {"1e0":1, "1e-3":1e-3, "1e-6":1e-6};             // -> g/L（注意 g/L 与 mg/mL 数值相同）
+
+  const $ = id => document.getElementById(id);
+  const num = el => {
+    if (!el) return NaN;
+    const v = parseFloat((el.value || "").replace(/,/g, ".").replace(/[，。]/g, "."));
+    return isFinite(v) ? v : NaN;
+  };
+  const fmt = (v, digits) => {
+    if (!isFinite(v)) return "—";
+    if (v !== 0 && (Math.abs(v) >= 1e6 || Math.abs(v) < 1e-4)) return v.toExponential(2);
+    let s = v.toPrecision(digits === undefined ? 4 : digits);
+    if (s.indexOf("e") < 0) s = String(parseFloat(s));
+    return s;
+  };
+  function massText(g){
+    if (!isFinite(g)) return ["—",""];
+    const mg = g * 1000;
+    if (mg >= 1000) return [fmt(mg/1000), "g"];
+    if (mg >= 1)    return [fmt(mg), "mg"];
+    if (mg >= 1e-3) return [fmt(mg*1000), "μg"];
+    return [fmt(mg*1e6), "ng"];
+  }
+  function volText(L){
+    if (!isFinite(L)) return ["—",""];
+    const uL = L * 1e6;
+    if (uL >= 1e6) return [fmt(uL/1e6), "L"];
+    if (uL >= 1000) return [fmt(uL/1000), "mL"];
+    if (uL >= 1)    return [fmt(uL), "μL"];
+    return [fmt(uL*1000), "nL"];
+  }
+  function volAll(L){
+    const uL = L*1e6;
+    return "= " + fmt(uL/1e6) + " L / " + fmt(uL/1000) + " mL / " + fmt(uL) + " μL / " + fmt(uL*1000) + " nL";
+  }
+  function massAll(g){
+    const mg = g*1000;
+    return "= " + fmt(mg/1000) + " g / " + fmt(mg) + " mg / " + fmt(mg*1000) + " μg / " + fmt(mg*1e6) + " ng";
+  }
+  function purityOf(el){
+    let p = num(el);
+    if (!isFinite(p) || p <= 0) p = 100;
+    return p;
+  }
+
+  // ---------- tab / 子模式 ----------
+  let stockMode = "vol";
+  window.showTab = function(name){
+    ["stock","dil","conv"].forEach(n=>{
+      $("p-"+n).classList.toggle("hidden", n !== name);
+      $("tab-"+n).classList.toggle("on", n === name);
+    });
+    recalcAll();
+  };
+  window.setStockMode = function(mode){
+    stockMode = mode;
+    ["vol","mass","conc"].forEach(m=>{
+      $("mode-"+m).classList.toggle("on", mode === m);
+      $("grp-"+m).classList.toggle("hidden", mode !== m);
+    });
+    calcStock();
+    saveState();
+  };
+
+  // ---------- 配母液 ----------
+  function calcStock(){
+    const mw = num($("s-mw"));
+    const out = $("s-out");
+    if (!isFinite(mw) || mw <= 0){
+      out.innerHTML = '<div class="big">—</div><div class="line">先填分子量</div>';
+      return;
+    }
+
+    if (stockMode === "vol"){
+      // 称药 -> 算需要定容到多少体积
+      const m = num($("s-mass"));
+      const mu = MASS[$("s-massu").value];
+      const c = num($("s-conc"));
+      const cu = CONC[$("s-concu").value];
+      const pur = purityOf($("s-purity"));
+      $("s-hint").textContent = "按纯度折算后，定容到这个体积";
+      if (!isFinite(m) || !isFinite(c) || m <= 0 || c <= 0){
+        out.innerHTML = '<div class="big">—</div><div class="line">填质量、目标浓度，结果自动出来</div>';
+        return;
+      }
+      const gPure = m * mu * (pur / 100);   // 纯品质量 g
+      const mol = gPure / mw;               // mol
+      const V = mol / (c * cu);             // L
+      const [v, u] = volText(V);
+      out.innerHTML =
+        '<div class="big">' + v + '<small>' + u + '</small></div>' +
+        '<div class="line">需要定容到的体积（溶剂加到这么多）</div>' +
+        '<div class="line" style="font-size:13px">' + volAll(V) + '</div>' +
+        '<div class="line">折合纯品 <b>' + fmt(gPure*1000) + ' mg</b>，目标 <b>' + fmt(c) + ' ' +
+          $("s-concu").selectedOptions[0].text + '</b></div>';
+      return;
+    }
+
+    // 称药 + 定容 -> 算浓度
+    if (stockMode === "conc"){
+      const m3 = num($("s3-mass"));
+      const mu3 = MASS[$("s3-massu").value];
+      const v3 = num($("s3-vol"));
+      const vu3 = VOL[$("s3-volu").value];
+      const p3 = purityOf($("s3-purity"));
+      $("s-hint").textContent = "称了多少、定容到多少，算出实际浓度";
+      if (!isFinite(m3) || !isFinite(v3) || m3 <= 0 || v3 <= 0){
+        out.innerHTML = '<div class="big">—</div><div class="line">填称取质量和定容体积，结果自动出来</div>';
+        return;
+      }
+      const mol3 = (m3 * mu3 * (p3/100)) / mw;   // mol
+      const C3 = mol3 / (v3 * vu3);              // mol/L
+      out.innerHTML =
+        '<div class="big">' + fmt(C3*1000, 4) + '<small>mM</small></div>' +
+        '<div class="line">实际浓度' + (p3 === 100 ? '' : '（纯度 ' + fmt(p3,4) + '%）') + '</div>' +
+        '<div class="line" style="font-size:13px">= ' + fmt(C3) + ' M / ' + fmt(C3*1000) + ' mM / ' + fmt(C3*1e6) + ' μM / ' + fmt(C3*1e9) + ' nM</div>' +
+        '<div class="line">定容到 <b>' + fmt(v3) + ' ' + $("s3-volu").selectedOptions[0].text + '</b></div>';
+      return;
+    }
+
+    // 定容 -> 算称多少药
+    const c2 = num($("s2-conc"));
+    const cu2 = CONC[$("s2-concu").value];
+    const v2 = num($("s2-vol"));
+    const vu2 = VOL[$("s2-volu").value];
+    const pur2 = purityOf($("s2-purity"));
+    $("s-hint").textContent = "称这个质量，定容到设定体积";
+    if (!isFinite(c2) || !isFinite(v2) || c2 <= 0 || v2 <= 0){
+      out.innerHTML = '<div class="big">—</div><div class="line">填目标浓度、定容体积，结果自动出来</div>';
+      return;
+    }
+    const mol2 = c2 * cu2 * v2 * vu2;
+    const gTheo = mol2 * mw;
+    const gWeigh = gTheo / (pur2 / 100);
+    const [mv, muu] = massText(gWeigh);
+    out.innerHTML =
+      '<div class="big">' + mv + '<small>' + muu + '</small></div>' +
+      '<div class="line">需要称取的质量（纯度 ' + (pur2 === 100 ? '100%' : fmt(pur2,4) + '%') + '）</div>' +
+      '<div class="line" style="font-size:13px">' + massAll(gWeigh) + '</div>' +
+      '<div class="line">定容到 <b>' + fmt(v2) + ' ' + $("s2-volu").selectedOptions[0].text + '</b></div>';
+  }
+
+  // ---------- 稀释 ----------
+  function calcDil(){
+    const c1 = num($("d-c1")), c1u = CONC[$("d-c1u").value];
+    const c2 = num($("d-c2")), c2u = CONC[$("d-c2u").value];
+    const v2 = num($("d-v2")), v2u = VOL[$("d-v2u").value];
+    const out = $("d-out");
+    if (!isFinite(c1)||!isFinite(c2)||!isFinite(v2)||c1<=0||c2<=0||v2<=0){
+      out.innerHTML = '<div class="big">—</div><div class="line">在上面填数字，结果自动出来</div>';
+      return;
+    }
+    const C1 = c1*c1u, C2 = c2*c2u, V2 = v2*v2u;
+    if (C2 > C1){
+      out.innerHTML = '<div class="big">—</div><div class="line" style="color:#b45309">目标浓度高于母液，稀释做不出来</div>';
+      return;
+    }
+    const V1 = C2 * V2 / C1;
+    const Vs = V2 - V1;
+    const [v1t,u1] = volText(V1);
+    const [vst,us] = volText(Vs);
+    out.innerHTML =
+      '<div class="big">' + v1t + '<small>' + u1 + '</small></div>' +
+      '<div class="line">取母液体积</div>' +
+      '<div class="line" style="font-size:13px">' + volAll(V1) + '</div>' +
+      '<div class="line">补溶剂 <b>' + vst + ' ' + us + '</b>，终体积 ' + fmt(V2*1000) + ' mL</div>' +
+      '<div class="line">稀释倍数 <b>' + fmt(C1/C2) + '×</b></div>';
+  }
+
+  // ---------- 换算 ----------
+  let convLock = false;
+  function convRender(){
+    const cName = $("c-molu").selectedOptions[0].text;
+    const mName = $("c-massu").selectedOptions[0].text;
+    const cu = CONC[$("c-molu").value];
+    const gL = num($("c-mass")) * MASSCONC[$("c-massu").value];
+    const cMol = num($("c-mol")) * cu;
+    $("c-out").innerHTML =
+      '<div class="big">' + fmt(cMol / cu) + '<small> ' + cName + '</small></div>' +
+      '<div class="line">摩尔浓度 ' + fmt(cMol / cu) + ' ' + cName + '（MW ' + fmt(num($("c-mw"))) + '）</div>' +
+      '<div class="line">质量浓度 <b>' + fmt(num($("c-mass"))) + ' ' + mName + '</b> = ' + fmt(gL) + ' g/L</div>';
+  }
+  function calcConvFromMass(){
+    const mw = num($("c-mw"));
+    const m  = num($("c-mass"));
+    const mu = MASSCONC[$("c-massu").value];
+    if (!isFinite(mw) || !isFinite(m) || mw <= 0){
+      $("c-out").innerHTML = '<div class="big">—</div><div class="line">填分子量和其中一边</div>';
+      return;
+    }
+    const M = (m * mu) / mw;                 // mol/L
+    const cu = CONC[$("c-molu").value];
+    convLock = true; $("c-mol").value = fmt(M / cu, 6); convLock = false;
+    convRender();
+  }
+  function calcConvFromMol(){
+    if (convLock) return;
+    const mw = num($("c-mw"));
+    const c  = num($("c-mol"));
+    const cu = CONC[$("c-molu").value];
+    if (!isFinite(mw) || !isFinite(c) || mw <= 0){
+      $("c-out").innerHTML = '<div class="big">—</div><div class="line">填分子量和其中一边</div>';
+      return;
+    }
+    const gL = c * cu * mw;
+    const mu = MASSCONC[$("c-massu").value];
+    convLock = true; $("c-mass").value = fmt(gL / mu, 6); convLock = false;
+    convRender();
+  }
+
+  function recalcAll(){
+    calcStock(); calcDil();
+    if ($("c-mol").value && !$("c-mass").value && isFinite(num($("c-mw")))) calcConvFromMol();
+    else calcConvFromMass();
+    saveState();
+  }
+
+  // ---------- PubChem ----------
+  window.lookupMW = function(){
+    const name = ($("s-name").value || "").trim();
+    if (!name){ $("s-namehint").textContent = "先输入英文名称"; return; }
+    $("s-namehint").textContent = "查询中…";
+    const url = "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/"
+      + encodeURIComponent(name) + "/property/MolecularWeight,Title/JSON";
+    fetch(url, { mode: "cors" })
+      .then(r => r.json())
+      .then(j => {
+        const p = j && j.PropertyTable && j.PropertyTable.Properties && j.PropertyTable.Properties[0];
+        if (!p || !p.MolecularWeight) throw new Error("not found");
+        const mw = Number(p.MolecularWeight);
+        $("s-mw").value = fmt(mw, 6);
+        $("s-namehint").textContent = "已填入：" + (p.Title || name) + "，MW = " + fmt(mw, 6);
+        recalcAll();
+      })
+      .catch(() => {
+        $("s-namehint").textContent = "没查到（网络不通或中文名不支持），请手输 MW";
+      });
+  };
+
+  // ---------- 记忆上次输入 ----------
+  const KEY = "molcalc.v2";
+  function saveState(){
+    try{
+      const d = {};
+      document.querySelectorAll("input,select").forEach(el=>{
+        if (el.id) d[el.id] = el.value;
+      });
+      d.__mode = stockMode;
+      d.__tab = ["stock","dil","conv"].find(n => !$("p-"+n).classList.contains("hidden")) || "stock";
+      localStorage.setItem(KEY, JSON.stringify(d));
+    }catch(e){}
+  }
+  function loadState(){
+    try{
+      const raw = localStorage.getItem(KEY);
+      if (!raw) return;
+      const d = JSON.parse(raw);
+      Object.keys(d).forEach(id=>{
+        if (id === "__mode" || id === "__tab") return;
+        const el = $(id);
+        if (el && d[id] !== undefined) el.value = d[id];
+      });
+      if (d.__mode) window.setStockMode(d.__mode);
+      if (d.__tab) window.showTab(d.__tab);
+    }catch(e){}
+  }
+
+  // ---------- 事件 ----------
+  document.querySelectorAll("input,select").forEach(el=>{
+    const handler = ()=>{
+      if (el.id.startsWith("s-") || el.id.startsWith("s2-") || el.id.startsWith("s3-")) calcStock();
+      else if (el.id.startsWith("d-")) calcDil();
+      else if (el.id.startsWith("c-")){
+        if (el.id === "c-mass" || el.id === "c-massu") calcConvFromMass();
+        else calcConvFromMol();
+      }
+      saveState();
+    };
+    el.addEventListener("input", handler);
+    el.addEventListener("change", handler);
+  });
+
+  loadState();
+  recalcAll();
+})();
+</script>
+</body>
+</html>
